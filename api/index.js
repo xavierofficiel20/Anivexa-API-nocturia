@@ -1,25 +1,40 @@
-import worker from "../index.js";
+async function handleProxy(request) {
+  const urlObj = new URL(request.url);
+  const targetUrl = urlObj.searchParams.get("url");
 
-export default async function handler(req, res) {
-  const host = req.headers["host"] ?? "localhost";
-  const url = `https://${host}${req.url}`;
+  if (!targetUrl) {
+    return new Response(JSON.stringify({ error: "L'URL cible est requise (?url=...)" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+    });
+  }
 
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  const body = chunks.length ? Buffer.concat(chunks) : null;
+  let referer = 'https://vidmoly.to/';
+  if (targetUrl.includes('sibnet')) {
+    referer = 'https://video.sibnet.ru/';
+  } else if (targetUrl.includes('sendvid')) {
+    referer = 'https://sendvid.com/';
+  }
 
-  const request = new Request(url, {
-    method: req.method,
-    headers: req.headers,
-    body: body?.length ? body : undefined,
-    duplex: "half",
-  });
+  try {
+    const upstreamResponse = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+        'Referer': referer
+      }
+    });
 
-  const response = await worker.fetch(request, {});
+    const newHeaders = new Headers(upstreamResponse.headers);
+    newHeaders.set("Access-Control-Allow-Origin", "*");
 
-  res.statusCode = response.status;
-  for (const [k, v] of response.headers) res.setHeader(k, v);
-
-  const buf = await response.arrayBuffer();
-  res.end(Buffer.from(buf));
+    return new Response(upstreamResponse.body, {
+      status: upstreamResponse.status,
+      headers: newHeaders
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: "Échec du relais proxy du flux vidéo" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+    });
+  }
 }
