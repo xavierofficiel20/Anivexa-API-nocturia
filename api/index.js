@@ -1,3 +1,4 @@
+// --- AJOUT DU PROXY POUR CONTOURNER LES ERREURS 403 ---
 async function handleProxy(request) {
   const urlObj = new URL(request.url);
   const targetUrl = urlObj.searchParams.get("url");
